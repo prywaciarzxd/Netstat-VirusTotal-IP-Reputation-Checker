@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import re
 import os
@@ -7,7 +8,6 @@ from time import sleep
 
 class NetstatOutput:
     def __init__(self):
-        self.command = "netstat -tulnpa -4"
         self.api_key = self.set_api_key()
         self.max_checks_per_minute = 4
         self.checks_counter = 0
@@ -16,20 +16,17 @@ class NetstatOutput:
         os.environ['VT_ApiKey'] = getpass.getpass('Please enter correct API key for VirusTotal: ')
         return os.environ['VT_ApiKey']
 
-    def get_netstat_output(self):
+    def get_ips_from_netstat(self):
         try:
-            process = subprocess.Popen(self.command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            command = "netstat -tulnpa -4"
+            process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate()
-            return stdout.decode()
+            netstat_output = stdout.decode()
+            ip_addresses = re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', netstat_output)
+            return [ip for ip in ip_addresses if not (ip.startswith('172.16.') or ip.startswith('192.168.') or ip.startswith('10.0') or ip == '127.0.0.1' or ip == '0.0.0.0')]
         except Exception as e:
             print(f'Error occurred while running netstat command: {e}')
-            return None
-
-    def extract_ips(self, netstat_output):
-        if not netstat_output:
             return []
-        ip_addresses = re.findall(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', netstat_output)
-        return [ip for ip in ip_addresses if not (ip.startswith('172.16.') or ip.startswith('192.168.') or ip.startswith('10.0') or ip == '127.0.0.1' or ip == '0.0.0.0')]
 
     def virustotal_api(self, ip_addresses):
         for ip in ip_addresses:
@@ -44,11 +41,7 @@ class NetstatOutput:
             else:
                 print(f"Error: {response.status_code}")
 
-    def run_checks(self):
-        netstat_output = self.get_netstat_output()
-        if not netstat_output:
-            return
-        ip_addresses = self.extract_ips(netstat_output)
+    def run_checks(self, ip_addresses):
         for ip in ip_addresses:
             if self.checks_counter == self.max_checks_per_minute:
                 print("You have reached the API rate limit. Waiting 60 seconds...")
@@ -58,5 +51,21 @@ class NetstatOutput:
             self.checks_counter += 1
 
 
-netstat = NetstatOutput()
-netstat.run_checks()
+def main():
+    parser = argparse.ArgumentParser(description='Check IP reputations using VirusTotal API')
+    parser.add_argument('--ips', nargs='+', help='List of IP addresses to check')
+    args = parser.parse_args()
+
+    if not args.ips:
+        netstat = NetstatOutput()
+        ip_addresses = netstat.get_ips_from_netstat()
+    else:
+        ip_addresses = args.ips
+
+    if ip_addresses:
+        netstat = NetstatOutput()
+        netstat.run_checks(ip_addresses)
+
+
+if __name__ == "__main__":
+    main()
