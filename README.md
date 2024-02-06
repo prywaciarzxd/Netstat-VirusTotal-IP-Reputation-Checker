@@ -16,6 +16,7 @@ This Python script is designed to facilitate the analysis of active network conn
 - Python 3.x
 - requests package
 - VirusTotal account and API key (for full functionality)
+- Currently only on Linux machines
 
 ## How to Use:
 1. Run the `check_connections.py` script.
